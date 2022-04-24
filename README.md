@@ -23,7 +23,6 @@ Run following commands to install **BeautifulSoup**
 
 `$ sudo apt-get install python3-bs4`
 
-`$ pip install beautifulsoup4`
 
 *You can very if it is correctly installed with this command*
 
