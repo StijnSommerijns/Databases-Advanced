@@ -35,9 +35,13 @@ Installing **pandas**
 
 `$ sudo apt-get install python3-pandas`
 
-Installing the PyMongo module
+Installing the **PyMongo** module for MongoDB
 
 `sudo apt-get install python3-pymongo`
+
+Installation of **Redis** module
+
+`python3 –m pip install redis`
 
 ## Installing MongoDB
 This code can be found in the bash file named "MongoDB-script"
@@ -58,4 +62,12 @@ This code can be found in the bash file named "MongoDB-script"
 
 `sudo systemctl enable mongod`
 
-To open the mongo shell, type "mongo" in the terminal
+To access the mongo shell, type "mongo" in the terminal
+## Installing Redis
+This code can be found in the bash file named "Redis-script"
+
+`sudo apt update`
+
+`sudo apt install redis-server`
+
+To access the Redis shell, type "redis-cli" in the terminal
