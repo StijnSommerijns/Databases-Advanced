@@ -18,7 +18,7 @@ Run following commands to install python:
 
 `$ mkdir Python_Scripts`
 
-## Installing packages for scraper
+## Installing Python packages for scraper
 Run following commands to install **BeautifulSoup**
 
 `$ sudo apt-get install python3-bs4`
