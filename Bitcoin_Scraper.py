@@ -1,19 +1,21 @@
+from xmlrpc.client import DateTime
 from bs4 import BeautifulSoup
 from time import sleep
 import requests
 import pandas as pd
 import pymongo as mongo
 import json
+import redis
 
 client = mongo.MongoClient("mongodb://127.0.0.1:27017/")
 database = client["databasesAdvanced"]
 collection = database["bitcoinHashes"]
 
+redis_client = redis.Redis(host="localhost", port="6379", db=0)
+
 # Declaring empty dataframes for both all and highest bitcoin hashes
 bitcoinDataFrame = pd.DataFrame(columns =['Hash', 'Time', 'Amount (BTC)', 'Amount (USD)'], dtype = float)
-#bitcoinDataFrame['Time'] = pd.to_datetime(bitcoinDataFrame['Time'], format="%H:%M")
 highestValuesDataFrame = pd.DataFrame(columns =['Hash', 'Time', 'Amount (BTC)', 'Amount (USD)'], dtype = float)
-#allValuesDataFrame = pd.DataFrame(columns =['Hash', 'Time', 'Amount (BTC)', 'Amount (USD)'], dtype = float)
 
 # Function for continuous scraping and data cleansing
 def bitcoinScraper():
@@ -80,28 +82,21 @@ def highestPerMinute():
 
     # Removing all data from the big bitcoinDataFrame with the same value as startTime
     bitcoinDataFrame = bitcoinDataFrame[bitcoinDataFrame.Time != startTime]
-    return highestValueJSON[1:-1]
-    
-    #global highestValuesDataFrame
-    # Joining the first row of the 'startingMinute' to the dataframe for highest values
-    #highestValuesDataFrame = pd.concat([highestValuesDataFrame, startingMinuteDF.iloc[:1]], ignore_index=True)
-    
-    # global allValuesDataFrame
-    # allValuesDataFrame = pd.concat([allValuesDataFrame, startingMinuteDF], ignore_index=True)
-    # allValuesDataFrame.to_csv("rawoutput.csv")
 
-    #return highestValuesDataFrame.to_string()
+    return highestValueJSON[1:-1]
 
 counter = 0
-while counter < 15:
+while counter < 14:
     # Scraping the webpage
     bitcoinScraper()
     counter += 1
+    #print(counter)
     # Triggers when 1 minute has passed
-    if counter == 14:
-        # Creates a text file with the contents of the 'highestValuesDataFrame'
-        hash = json.loads(highestPerMinute())
-        collection.insert_one(hash)
+    if counter == 13:
+        # Creates a key-value pair in Redis with an expiration of 59 seconds
+        redis_client.set("bitcoin_hash", highestPerMinute(), ex=59)
+        # Pushes the cashed key-value from Redis to MongoDB
+        collection.insert_one(json.loads(redis_client.get("bitcoin_hash")))
         # Resets counter so loop can continue to run
         counter = 0
     # Waiting 4 seconds to scrape again
