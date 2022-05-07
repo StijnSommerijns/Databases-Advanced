@@ -2,6 +2,12 @@ from bs4 import BeautifulSoup
 from time import sleep
 import requests
 import pandas as pd
+import pymongo as mongo
+import json
+
+client = mongo.MongoClient("mongodb://127.0.0.1:27017/")
+database = client["databasesAdvanced"]
+collection = database["bitcoinHashes"]
 
 # Declaring empty dataframes for both all and highest bitcoin hashes
 bitcoinDataFrame = pd.DataFrame(columns =['Hash', 'Time', 'Amount (BTC)', 'Amount (USD)'], dtype = float)
@@ -68,19 +74,23 @@ def highestPerMinute():
     startingMinuteDF = bitcoinDataFrame[bitcoinDataFrame["Time"] == startTime]
     # Sorting this dataframe so that the highest bitcoin value is on top
     startingMinuteDF.sort_values(by='Amount (BTC)', inplace=True, ascending=False)
+
+    highestValue = startingMinuteDF.iloc[:1]
+    highestValueJSON = highestValue.to_json(orient="records")
+
+    # Removing all data from the big bitcoinDataFrame with the same value as startTime
+    bitcoinDataFrame = bitcoinDataFrame[bitcoinDataFrame.Time != startTime]
+    return highestValueJSON[1:-1]
     
-    global highestValuesDataFrame
+    #global highestValuesDataFrame
     # Joining the first row of the 'startingMinute' to the dataframe for highest values
-    highestValuesDataFrame = pd.concat([highestValuesDataFrame, startingMinuteDF.iloc[:1]], ignore_index=True)
+    #highestValuesDataFrame = pd.concat([highestValuesDataFrame, startingMinuteDF.iloc[:1]], ignore_index=True)
     
     # global allValuesDataFrame
     # allValuesDataFrame = pd.concat([allValuesDataFrame, startingMinuteDF], ignore_index=True)
     # allValuesDataFrame.to_csv("rawoutput.csv")
-    
-    # Removing all data from the big bitcoinDataFrame with the same value as startTime
-    bitcoinDataFrame = bitcoinDataFrame[bitcoinDataFrame.Time != startTime]
 
-    return highestValuesDataFrame.to_string()
+    #return highestValuesDataFrame.to_string()
 
 counter = 0
 while counter < 15:
@@ -90,9 +100,8 @@ while counter < 15:
     # Triggers when 1 minute has passed
     if counter == 14:
         # Creates a text file with the contents of the 'highestValuesDataFrame'
-        file = open("output.txt", "w")
-        file.write(highestPerMinute())
-        file.close()
+        hash = json.loads(highestPerMinute())
+        collection.insert_one(hash)
         # Resets counter so loop can continue to run
         counter = 0
     # Waiting 4 seconds to scrape again
