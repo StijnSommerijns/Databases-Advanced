@@ -24,8 +24,7 @@ Run following commands to install **BeautifulSoup**
 `$ sudo apt-get install python3-bs4`
 
 
-*You can very if it is correctly installed with this command*
-
+*You can very if it is correctly installed with this command*: 
 `$ python3 -m pip show beautifulsoup4`
 
 Installation of **Requests**
@@ -35,3 +34,28 @@ Installation of **Requests**
 Installing **pandas**
 
 `$ sudo apt-get install python3-pandas`
+
+Installing the PyMongo module
+
+`sudo apt-get install python3-pymongo`
+
+## Installing MongoDB
+This code can be found in the bash file named "MongoDB-script"
+
+`wget -qO - https://www.mongodb.org/static/pgp/server-5.0.asc | sudo apt-key add –`
+
+`sudo apt update`
+
+`echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/5.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-5.0.list`
+
+`sudo apt-get update`
+
+`sudo apt-get install -y mongodb-org`
+
+`sudo systemctl start mongod`
+
+`systemctl status mongod`
+
+`sudo systemctl enable mongod`
+
+To open the mongo shell, type "mongo" in the terminal
