@@ -31,10 +31,6 @@ Installation of **Requests**
 
 `$ python -m pip install requests`
 
-Installing **pandas**
-
-`$ sudo apt-get install python3-pandas`
-
 Installing the **PyMongo** module for MongoDB
 
 `sudo apt-get install python3-pymongo`
