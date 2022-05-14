@@ -1,21 +1,22 @@
-from xmlrpc.client import DateTime
+from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from time import sleep
 import requests
-import pandas as pd
 import pymongo as mongo
 import json
 import redis
 
+# Using the pymongo module to connect to MongoDB
 client = mongo.MongoClient("mongodb://127.0.0.1:27017/")
+# Making database and collection
 database = client["databasesAdvanced"]
 collection = database["bitcoinHashes"]
 
+# Using the redis module to connect to redis
 redis_client = redis.Redis(host="localhost", port="6379", db=0)
 
-# Declaring empty dataframes for both all and highest bitcoin hashes
-bitcoinDataFrame = pd.DataFrame(columns =['Hash', 'Time', 'Amount (BTC)', 'Amount (USD)'], dtype = float)
-highestValuesDataFrame = pd.DataFrame(columns =['Hash', 'Time', 'Amount (BTC)', 'Amount (USD)'], dtype = float)
+# Declaring empty list to store hashes before exporting to redis
+list_of_hashes = []
 
 # Function for continuous scraping and data cleansing
 def bitcoinScraper():
@@ -27,18 +28,15 @@ def bitcoinScraper():
     # Finding all div tags holding bitcoin information
     links = soupBS.find_all("div", {"class" : "sc-1g6z4xm-0 hXyplo"})
 
-    #Declaring empty list
+    #Declaring empty list for content of div tags
     list_of_divs = []
 
     # Putting content of div tags in previous declared list
     for link in links:
         list_of_divs.append(link.get_text())
 
-    # Declaring new empty list
-    bitcoin_list = []
-
-    # Looping over list with div content and data cleansing
-    for div in list_of_divs:
+    # Looping over reversed list with div content and data cleansing
+    for div in reversed(list_of_divs):
         div = div.replace("Hash", "")
         div = div.replace("Time", " ")
         div = div.replace("Amount (BTC)", " ")
@@ -47,56 +45,67 @@ def bitcoinScraper():
         # Splitting the 'div' string into a list
         temp_list = list(div.split(" "))
 
+        # Adjusting scraped time to local time
+        timestamp = datetime.strptime(temp_list[1], "%H:%M") + timedelta(hours=2)
+        temp_list[1] = timestamp.strftime("%H:%M")
+        
         # Looping over elements of new list to clean final data
         for i in range(len(temp_list)):
             if "_BTC" in temp_list[i]:
-                temp_list[i] = temp_list[i][:-4]
-        # Adding the temporary list to the general 'bitcoin_list'
-        bitcoin_list.append(temp_list)
+                temp_list[i] = float(temp_list[i][:-4])
+                break
+        # Adding the temp_list to list_of_hashes without duplicates
+        if temp_list not in list_of_hashes:
+            list_of_hashes.append(temp_list)
 
-    global bitcoinDataFrame
-    # Declaring and initializing a temporary dataframe, populating it with the content of the 'bitcoin_list'
-    # and reversing it so older records are on top
-    bitcoinDataFrameTemp = pd.DataFrame(bitcoin_list, columns =['Hash', 'Time', 'Amount (BTC)', 'Amount (USD)']).iloc[::-1]
-    # Joining the temporary dataframe to the big dataframe and removing any duplicate data
-    bitcoinDataFrame = pd.concat([bitcoinDataFrame, bitcoinDataFrameTemp]).drop_duplicates().reset_index(drop=True)
-
-    # Making sure the 'Amount (BTC)' data gets read as a float
-    bitcoinDataFrame = bitcoinDataFrame.astype({'Amount (BTC)': 'float'})
-    # Emptying the temporary dataframe
-    bitcoinDataFrameTemp.drop(bitcoinDataFrameTemp.index, inplace=True)
-
-# Function to extract highest hash value to text file
+# Function to send all hashes of the same minute to redis and returns key of hashes that have been pushed
 def highestPerMinute():
-    global bitcoinDataFrame
-    # Declaring and initializing the first timestamp from the dataframe
-    startTime = bitcoinDataFrame["Time"].iloc[0]
+    global list_of_hashes
     
-    # Making a dataframe only consisting of data with the same value as 'startTime'
-    startingMinuteDF = bitcoinDataFrame[bitcoinDataFrame["Time"] == startTime]
-    # Sorting this dataframe so that the highest bitcoin value is on top
-    startingMinuteDF.sort_values(by='Amount (BTC)', inplace=True, ascending=False)
+    # Getting timestamp for first set of hashes
+    timestamp = list_of_hashes[0][1]
+    columns = ['Hash', 'Time', 'Amount (BTC)', 'Amount (USD)']
+    # Populating list with dictionary of first hash as reference to compare bitcoin value
+    timestamp_list = [dict(zip(columns, list_of_hashes[0]))]
 
-    highestValue = startingMinuteDF.iloc[:1]
-    highestValueJSON = highestValue.to_json(orient="records")
+    # Looping over list_of_hashes to find what hashvalue is the highest
+    for i in range(len(list_of_hashes))[1:]:
+        # Only checking the hashes of the current timestamp
+        if timestamp == list_of_hashes[i][1]:
+            redisValue = dict(zip(columns, list_of_hashes[i]))
+            # If hash is bigger it gets inserted as first element of redis list
+            if redisValue["Amount (BTC)"] >= timestamp_list[0]["Amount (BTC)"]:
+                timestamp_list.insert(0, redisValue)
+            # Else just add the value as last element
+            else:
+                timestamp_list.append(redisValue)
 
-    # Removing all data from the big bitcoinDataFrame with the same value as startTime
-    bitcoinDataFrame = bitcoinDataFrame[bitcoinDataFrame.Time != startTime]
+    # After all values of the timestamp have been pushed into the redis list, they get deleted from our list_of_hashes
+    timestamp_listLength = len(timestamp_list)
+    del list_of_hashes[0:timestamp_listLength]
 
-    return highestValueJSON[1:-1]
+    # Pushes to redis with the timestamp as key and the list as value
+    for i in range(len(timestamp_list)):
+        redis_client.rpush(timestamp, json.dumps(timestamp_list[i]))
+        # 60 seconds expiration on key
+        redis_client.expire(timestamp, 60)
+    return timestamp
 
 counter = 0
-while counter < 14:
+while counter < 15:
     # Scraping the webpage
     bitcoinScraper()
     counter += 1
-    #print(counter)
     # Triggers when 1 minute has passed
-    if counter == 13:
-        # Creates a key-value pair in Redis with an expiration of 59 seconds
-        redis_client.set("bitcoin_hash", highestPerMinute(), ex=59)
-        # Pushes the cashed key-value from Redis to MongoDB
-        collection.insert_one(json.loads(redis_client.get("bitcoin_hash")))
+    if counter == 14:
+        # Get returned the timestamp which is key
+        redisKey = highestPerMinute()
+        # lrange to find first element of list
+        largestHash = redis_client.lrange(redisKey, 0, 0)
+        largestHash = str(largestHash)[3:-2]
+        # Pushing highest hash to MongoDB collection
+        collection.insert_one(json.loads(largestHash))
+        print("Highest hashvalue of " + redisKey + " has been stored in MongoDB")
         # Resets counter so loop can continue to run
         counter = 0
     # Waiting 4 seconds to scrape again
