@@ -67,3 +67,21 @@ This code can be found in the bash file named "Redis-script"
 `sudo apt install redis-server`
 
 To access the Redis shell, type "redis-cli" in the terminal
+## Docker
+Creating the Python container from the Dockerfile
+
+`docker build -t python-bitcoin-scraper .`
+
+`docker run -d --name bitcoin-scraper --network=host python-bitcoin-scraper`
+
+Creating the MongoDB container
+
+`docker pull mongo`
+
+`docker run -d -p 27017:27017 --name mongodb mongo:latest`
+
+Creating the Redis container
+
+`docker pull redis`
+
+`docker run --name redis-cont -p 6379:6379 -d redis`
